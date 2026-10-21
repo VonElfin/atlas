@@ -1,0 +1,18 @@
+{
+  "name": "atlas",
+  "version": "0.1.0",
+  "description": "Globo interativo desktop: relevo, população, clima e mais",
+  "scripts": {
+    "start": "neu run",
+    "dev": "neu run -- --window-enable-inspector=true",
+    "build": "neu build --release --embed-resources",
+    "catalog": "node scripts/build-catalog.mjs",
+    "icon": "node scripts/make-icon.mjs",
+    "setup": "neu update"
+  },
+  "type": "commonjs",
+  "devDependencies": {
+    "@neutralinojs/neu": "^11.8.0"
+  },
+  "private": true
+}

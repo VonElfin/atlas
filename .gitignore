@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.storage/
+.tmp/
+*.log
+# Baixados por `npm run setup` (neu update)
+bin/
+resources/js/neutralino.js
+resources/js/neutralino.d.ts

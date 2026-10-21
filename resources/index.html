@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Atlas</title>
+  <link rel="icon" href="icons/appIcon.png">
+  <link rel="stylesheet" href="vendor/maplibre/maplibre-gl.css">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <div id="map" aria-label="Globo interativo"></div>
+
+  <header id="topbar">
+    <form id="search" autocomplete="off" role="search">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="search-input" type="search" placeholder="Buscar lugar…  (Ctrl+K)" aria-label="Buscar lugar">
+      <ul id="search-results" hidden></ul>
+    </form>
+  </header>
+
+  <aside id="panel" aria-label="Camadas">
+    <div class="panel-head">
+      <h1>Atlas</h1>
+      <button id="panel-toggle" class="icon-btn" title="Recolher painel" aria-expanded="true">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg>
+      </button>
+    </div>
+    <div class="panel-body">
+      <section class="group">
+        <h2>Visualização</h2>
+        <div class="seg" role="radiogroup" aria-label="Projeção">
+          <button data-projection="globe" role="radio">Globo</button>
+          <button data-projection="mercator" role="radio">Plano</button>
+        </div>
+        <label class="row switch">
+          <input type="checkbox" id="terrain-toggle">
+          <span>Terreno 3D</span>
+        </label>
+        <label class="row slider" id="exaggeration-row">
+          <span>Exagero vertical</span>
+          <input type="range" id="exaggeration" min="1" max="5" step="0.5" value="1.5">
+          <output id="exaggeration-out">1.5×</output>
+        </label>
+        <label class="row switch">
+          <input type="checkbox" id="labels-toggle" checked>
+          <span>Fronteiras e nomes</span>
+        </label>
+      </section>
+
+      <section class="group">
+        <h2>Mapa base</h2>
+        <div class="seg" id="basemaps" role="radiogroup" aria-label="Mapa base"></div>
+      </section>
+
+      <section class="group" id="time-group">
+        <h2>Data dos dados mensais</h2>
+        <div class="time-row">
+          <button id="month-prev" class="icon-btn" title="Mês anterior">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg>
+          </button>
+          <input type="month" id="month" aria-label="Mês">
+          <button id="month-next" class="icon-btn" title="Próximo mês">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+          </button>
+          <button id="month-play" class="icon-btn" title="Animar meses">
+            <svg class="icon play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+            <svg class="icon pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>
+          </button>
+        </div>
+        <p class="hint">Vale para temperatura, precipitação e vegetação.</p>
+      </section>
+
+      <div id="overlays"></div>
+    </div>
+  </aside>
+
+  <aside id="info" hidden aria-live="polite">
+    <div class="panel-head">
+      <h2 id="info-title">Ponto</h2>
+      <button id="info-close" class="icon-btn" title="Fechar">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+    <div class="panel-body" id="info-body"></div>
+  </aside>
+
+  <footer id="status">
+    <span id="status-coords">—</span>
+    <span id="status-elev"></span>
+    <span id="status-loading" hidden>carregando…</span>
+  </footer>
+
+  <!-- As globais NL_* são injetadas pelo Neutralino (injectGlobals) -->
+  <script src="js/neutralino.js"></script>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
