@@ -1,14 +1,9 @@
 // Leitura de valores em um ponto a partir dos próprios tiles raster:
 // elevação decodificada do Terrarium e valores GIBS pela cor do colormap.
 import { TERRARIUM } from './layers.js';
+import { tileImage } from './tiles.js';
 
 const TILE = 256;
-const cache = new Map(); // url -> Promise<ImageData | null>
-const CACHE_MAX = 48;
-
-function tileUrl(template, z, x, y) {
-  return template.replace('{z}', z).replace('{x}', x).replace('{y}', y);
-}
 
 // Posição (tile e pixel) de um lng/lat em Web Mercator no zoom z.
 function locate(lng, lat, z) {
@@ -27,35 +22,9 @@ function locate(lng, lat, z) {
   };
 }
 
-function loadTile(url) {
-  if (cache.has(url)) {
-    const hit = cache.get(url);
-    cache.delete(url);
-    cache.set(url, hit);
-    return hit;
-  }
-  const p = (async () => {
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    // Sem conversão de cor nem pré-multiplicação: precisamos das cores exatas.
-    const bmp = await createImageBitmap(await res.blob(), {
-      colorSpaceConversion: 'none',
-      premultiplyAlpha: 'none',
-    });
-    const canvas = new OffscreenCanvas(bmp.width, bmp.height);
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    ctx.drawImage(bmp, 0, 0);
-    bmp.close();
-    return ctx.getImageData(0, 0, canvas.width, canvas.height);
-  })().catch(() => null);
-  cache.set(url, p);
-  if (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value);
-  return p;
-}
-
 async function samplePixel(template, z, lng, lat) {
   const { x, y, px, py } = locate(lng, lat, z);
-  const img = await loadTile(tileUrl(template, z, x, y));
+  const img = await tileImage(template, z, x, y);
   if (!img) return null;
   const i = (py * img.width + px) * 4;
   return img.data.slice(i, i + 4);
@@ -80,8 +49,8 @@ function colorIndex(colormap) {
 }
 
 /** Entrada do colormap correspondente à cor do pixel, ou null se sem dado. */
-export async function colormapEntryAt(template, maxzoom, colormap, lng, lat) {
-  const p = await samplePixel(template, maxzoom, lng, lat);
+export async function colormapEntryAt(template, z, colormap, lng, lat) {
+  const p = await samplePixel(template, z, lng, lat);
   if (!p || p[3] < 128) return null;
   const exact = colorIndex(colormap).get((p[0] << 16) | (p[1] << 8) | p[2]);
   if (exact) return exact;

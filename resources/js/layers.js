@@ -2,16 +2,28 @@
 // Para adicionar uma camada nova: inclua uma entrada em OVERLAYS (e, se for do
 // NASA GIBS, o id em scripts/build-catalog.mjs e rode `npm run catalog`).
 
-export const TERRARIUM = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
+// Os servidores de tiles abaixo falam HTTP/1.1 (6 conexões por host no
+// navegador); listar dois hosts do mesmo serviço dobra o paralelismo.
+export const TERRARIUM_TILES = [
+  'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
+  'https://elevation-tiles-prod.s3.amazonaws.com/terrarium/{z}/{x}/{y}.png',
+];
+export const TERRARIUM = TERRARIUM_TILES[0];
 const TERRARIUM_ATTR =
   'Elevação: <a href="https://registry.opendata.aws/terrain-tiles/" target="_blank">Mapzen/AWS Terrain Tiles</a>';
 const GIBS_ATTR = '<a href="https://earthdata.nasa.gov/gibs" target="_blank">NASA GIBS</a>';
+
+const esri = (service) =>
+  ['server', 'services'].map((h) => `https://${h}.arcgisonline.com/ArcGIS/rest/services/${service}/MapServer/tile/{z}/{y}/{x}`);
 
 export const BASEMAPS = [
   {
     id: 'satellite',
     name: 'Satélite',
-    tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+    // blankTile=false: onde não há imagem o Esri responde 404 (em vez do tile
+    // cinza "Map data not yet available") e usamos o ancestral ampliado.
+    tiles: esri('World_Imagery').map((u) => `${u}?blankTile=false`),
+    fallback: 6,
     maxzoom: 19,
     attribution: 'Imagens © <a href="https://www.esri.com" target="_blank">Esri</a>, Maxar, Earthstar Geographics',
   },
@@ -19,14 +31,14 @@ export const BASEMAPS = [
   {
     id: 'dark',
     name: 'Escuro',
-    tiles: ['https://basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png'],
+    tiles: ['a', 'b', 'c', 'd'].map((h) => `https://${h}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png`),
     maxzoom: 19,
     attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a>, © <a href="https://carto.com" target="_blank">CARTO</a>',
   },
 ];
 
 export const LABELS = {
-  tiles: ['https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}'],
+  tiles: esri('Reference/World_Boundaries_and_Places'),
   maxzoom: 19,
   attribution: 'Rótulos © Esri',
 };
@@ -78,6 +90,7 @@ const fmt = (v, digits = 0) =>
 export const OVERLAYS = [
   {
     id: 'relief',
+    short: 'Altitude',
     group: 'Relevo',
     name: 'Altitude e batimetria',
     kind: 'color-relief',
@@ -95,6 +108,7 @@ export const OVERLAYS = [
   },
   {
     id: 'population',
+    short: 'Densidade',
     group: 'Sociedade',
     name: 'Densidade populacional',
     gibs: (year) => `GPW_Population_Density_${year}`,
@@ -123,6 +137,7 @@ export const OVERLAYS = [
   },
   {
     id: 'temperature',
+    short: 'Temperatura',
     group: 'Clima',
     name: 'Temperatura do ar (média mensal)',
     gibs: () => 'MERRA2_2m_Air_Temperature_Monthly',
@@ -136,6 +151,7 @@ export const OVERLAYS = [
   },
   {
     id: 'precipitation',
+    short: 'Precipitação',
     group: 'Clima',
     name: 'Precipitação (média mensal)',
     gibs: () => 'MERRA2_Precipitation_Bias_Corrected_Monthly',
@@ -149,6 +165,7 @@ export const OVERLAYS = [
   },
   {
     id: 'ndvi',
+    short: 'NDVI',
     group: 'Natureza',
     name: 'Vegetação (NDVI)',
     gibs: () => 'MODIS_Terra_L3_NDVI_Monthly',
@@ -160,6 +177,7 @@ export const OVERLAYS = [
   },
   {
     id: 'landcover',
+    short: 'Cobertura',
     group: 'Natureza',
     name: 'Cobertura do solo',
     gibs: () => 'MODIS_Combined_L3_IGBP_Land_Cover_Type_Annual',

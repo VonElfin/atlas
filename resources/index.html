@@ -5,11 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Atlas</title>
   <link rel="icon" href="icons/appIcon.png">
+  <!-- Abre as conexões com os servidores de tiles antes do primeiro pedido -->
+  <link rel="preconnect" href="https://server.arcgisonline.com" crossorigin>
+  <link rel="preconnect" href="https://services.arcgisonline.com" crossorigin>
+  <link rel="preconnect" href="https://s3.amazonaws.com" crossorigin>
+  <link rel="preconnect" href="https://elevation-tiles-prod.s3.amazonaws.com" crossorigin>
+  <link rel="preconnect" href="https://gibs.earthdata.nasa.gov" crossorigin>
   <link rel="stylesheet" href="vendor/maplibre/maplibre-gl.css">
   <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
   <div id="map" aria-label="Globo interativo"></div>
+  <div id="badge" hidden aria-hidden="true"></div>
 
   <header id="topbar">
     <form id="search" autocomplete="off" role="search">
@@ -31,7 +38,7 @@
         <h2>Visualização</h2>
         <div class="seg" role="radiogroup" aria-label="Projeção">
           <button data-projection="globe" role="radio">Globo</button>
-          <button data-projection="mercator" role="radio">Plano</button>
+          <button data-projection="equal-earth" role="radio" title="Projeção Equal Earth (área igual)">Plano · Equal Earth</button>
         </div>
         <label class="row switch">
           <input type="checkbox" id="terrain-toggle">

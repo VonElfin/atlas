@@ -1,8 +1,19 @@
 import * as maplibregl from '../vendor/maplibre/maplibre-gl.mjs';
-import { BASEMAPS, LABELS, OVERLAYS, RELIEF_STOPS, TERRARIUM, gibsUrl } from './layers.js';
+import { BASEMAPS, LABELS, OVERLAYS, RELIEF_STOPS, TERRARIUM_TILES, gibsUrl } from './layers.js';
 import { colormapLegend, reliefLegend } from './legend.js';
 import { colormapEntryAt, elevationAt } from './probe.js';
 import { climographSvg, fetchNormals, koppen, koppenName } from './climate.js';
+import {
+  EQUAL_EARTH_CRS,
+  EQUAL_EARTH_MASK_URL,
+  equalEarthUrl,
+  fallbackUrl,
+  registerProtocols,
+} from './tiles.js';
+
+registerProtocols(maplibregl);
+maplibregl.addProjection(EQUAL_EARTH_CRS);
+maplibregl.setMaxParallelImageRequests(24);
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -87,6 +98,7 @@ for (const o of OVERLAYS) {
   if (o.variants && !o.variants.includes(state.overlays[o.id].variant)) state.overlays[o.id].variant = o.variant;
 }
 if (state.month < MONTH_MIN || state.month > MONTH_MAX) state.month = MONTH_DEFAULT;
+if (state.projection !== 'globe') state.projection = 'equal-earth'; // versões antigas salvavam 'mercator'
 
 let saveTimer;
 function persist() {
@@ -159,21 +171,56 @@ const layerType = (o) => o.kind ?? 'raster';
 const sourceUrls = new Map(); // id da camada temática -> URL de tiles em uso
 const vis = (on) => (on ? 'visible' : 'none');
 
+const SPACE = '#04060d';
+const EQUAL_EARTH = 'equal-earth';
+const isEqualEarth = () => state.projection === EQUAL_EARTH;
+
+// Tiles de 256 px exibidos em ~181 px: o MapLibre escolhe meio nível de zoom
+// acima e a imagem nunca é ampliada (com 256 px ela chega a 1,41×, borrando).
+const SHARP_TILE = Math.round(256 / Math.min(2, (window.devicePixelRatio || 1) * Math.SQRT2));
+
+// Lista final de URLs de uma fonte raster conforme a projeção atual.
+// No Equal Earth todos os tiles passam pela reprojeção; no globo, só quem
+// precisa de fallback passa por protocolo próprio.
+function tileUrls(templates, { maxzoom, sampling = 'linear', fallback = 0 }) {
+  if (isEqualEarth()) return [equalEarthUrl(templates[0], { maxzoom, sampling, fallback })];
+  if (fallback) return templates.map((t) => fallbackUrl(t, fallback));
+  return templates;
+}
+
 function buildStyle() {
+  const ee = isEqualEarth();
   const sources = {
-    dem: { type: 'raster-dem', tiles: [TERRARIUM], encoding: 'terrarium', tileSize: 256, maxzoom: 12, attribution: OVERLAYS[0].attribution },
-    'terrain-dem': { type: 'raster-dem', tiles: [TERRARIUM], encoding: 'terrarium', tileSize: 256, maxzoom: 13 },
-    labels: { type: 'raster', tiles: LABELS.tiles, tileSize: 256, maxzoom: LABELS.maxzoom, attribution: LABELS.attribution },
+    dem: {
+      type: 'raster-dem',
+      tiles: tileUrls(TERRARIUM_TILES, { maxzoom: 12, sampling: 'nearest' }),
+      encoding: 'terrarium',
+      tileSize: 256,
+      maxzoom: 12,
+      attribution: OVERLAYS[0].attribution,
+    },
+    labels: {
+      type: 'raster',
+      tiles: tileUrls(LABELS.tiles, { maxzoom: LABELS.maxzoom }),
+      tileSize: 256,
+      maxzoom: LABELS.maxzoom,
+      attribution: LABELS.attribution,
+    },
   };
-  const layers = [{ id: 'space', type: 'background', paint: { 'background-color': '#04060d' } }];
+  // Terreno 3D só no globo; fonte separada da do sombreamento, como recomenda o MapLibre.
+  if (!ee) {
+    sources['terrain-dem'] = { type: 'raster-dem', tiles: TERRARIUM_TILES, encoding: 'terrarium', tileSize: 256, maxzoom: 13 };
+  }
+  const layers = [{ id: 'space', type: 'background', paint: { 'background-color': SPACE } }];
 
   for (const b of BASEMAPS) {
     const info = b.gibs && catalog[b.gibs];
+    const maxzoom = info ? info.maxzoom : b.maxzoom;
     sources[`base-${b.id}`] = {
       type: 'raster',
-      tiles: info ? [gibsUrl(info, b.gibs, info.defaultTime)] : b.tiles,
-      tileSize: 256,
-      maxzoom: info ? info.maxzoom : b.maxzoom,
+      tiles: tileUrls(info ? [gibsUrl(info, b.gibs, info.defaultTime)] : b.tiles, { maxzoom, fallback: b.fallback }),
+      tileSize: SHARP_TILE,
+      maxzoom,
       attribution: b.attribution,
     };
     layers.push({
@@ -181,6 +228,7 @@ function buildStyle() {
       type: 'raster',
       source: `base-${b.id}`,
       layout: { visibility: vis(state.basemap === b.id) },
+      paint: { 'raster-fade-duration': 100 },
     });
   }
 
@@ -200,7 +248,7 @@ function buildStyle() {
       sourceUrls.set(o.id, g.url);
       sources[`src-${o.id}`] = {
         type: 'raster',
-        tiles: [g.url],
+        tiles: gibsTiles(o, g),
         tileSize: 256,
         maxzoom: g.info.maxzoom,
         attribution: `${o.source ? `${esc(o.source)} · ` : ''}<a href="https://earthdata.nasa.gov/gibs" target="_blank">NASA GIBS</a>`,
@@ -212,12 +260,21 @@ function buildStyle() {
     layers.push(layer);
   }
 
+  if (ee) {
+    // Recorta tudo (inclusive o relevo, que pinta o tile inteiro) no contorno do mundo.
+    sources['ee-mask'] = { type: 'raster', tiles: [EQUAL_EARTH_MASK_URL], tileSize: 256, maxzoom: 8 };
+    layers.push({ id: 'ee-mask', type: 'raster', source: 'ee-mask', paint: { 'raster-fade-duration': 0 } });
+  }
   layers.push({ id: 'labels', type: 'raster', source: 'labels', layout: { visibility: vis(state.labels) } });
 
-  return {
+  const style = {
     version: 8,
-    projection: { type: state.projection },
-    sky: {
+    projection: { type: ee ? EQUAL_EARTH_CRS.name : 'globe' },
+    sources,
+    layers,
+  };
+  if (!ee) {
+    style.sky = {
       'sky-color': '#0d1b3a',
       'horizon-color': '#6f9fd8',
       'fog-color': '#a9c6e8',
@@ -225,10 +282,30 @@ function buildStyle() {
       'horizon-fog-blend': 0.7,
       'fog-ground-blend': 0.3,
       'atmosphere-blend': ['interpolate', ['linear'], ['zoom'], 0, 1, 5, 1, 8, 0],
-    },
-    sources,
-    layers,
+    };
+    if (state.terrain) style.terrain = { source: 'terrain-dem', exaggeration: state.exaggeration };
+  }
+  return style;
+}
+
+const gibsTiles = (o, g) => tileUrls([g.url], { maxzoom: g.info.maxzoom, sampling: o.resampling ?? 'nearest' });
+
+// Abaixo do z12 o Esri usa outro mosaico, bem mais escuro e saturado. Com a
+// câmera inclinada perto do chão, os tiles distantes cairiam nesses zooms e
+// formariam uma faixa escura: com a câmera perto, não desça além do z12.
+const ESRI_MOSAIC_ZOOM = 12;
+function tuneImageryLod() {
+  if (isEqualEarth()) return;
+  const id = 'base-satellite';
+  const src = map.getSource(id);
+  if (!src || src.atlasLod) return;
+  map.setSourceTileLodParams(7, 3, id);
+  const lod = src.calculateTileZoom;
+  src.calculateTileZoom = (centerZoom, ...rest) => {
+    const z = lod(centerZoom, ...rest);
+    return centerZoom >= ESRI_MOSAIC_ZOOM + 1 ? Math.max(z, ESRI_MOSAIC_ZOOM) : z;
   };
+  src.atlasLod = true;
 }
 
 // ---------------------------------------------------------------- mapa
@@ -238,10 +315,6 @@ const map = new maplibregl.Map({
   style: buildStyle(),
   ...state.camera,
   maxPitch: 85,
-  // Cada tile raster vira uma textura na GPU; limitar o cache por fonte
-  // mantém a memória estável em sessões longas.
-  maxTileCacheSize: 150,
-  maxTileCacheZoomLevels: 3,
   attributionControl: { compact: true },
   dragRotate: true,
   touchPitch: true,
@@ -250,19 +323,30 @@ map.addControl(new maplibregl.NavigationControl({ visualizePitch: true, showZoom
 map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right');
 
 map.on('moveend', persist);
-map.on('load', () => {
-  if (state.terrain) applyTerrain();
-});
+map.on('style.load', tuneImageryLod);
 
 const loading = $('#status-loading');
 map.on('dataloading', () => (loading.hidden = false));
 map.on('idle', () => (loading.hidden = true));
 
 function applyTerrain() {
+  if (isEqualEarth()) return;
   map.setTerrain(state.terrain ? { source: 'terrain-dem', exaggeration: state.exaggeration } : null);
 }
 
 // ---------------------------------------------------------------- painel: visualização
+
+const NO_PADDING = { left: 0, right: 0, top: 0, bottom: 0 };
+
+// Enquadra o mapa-múndi inteiro na área livre ao lado do painel.
+function fitWorld() {
+  const { width, height } = map.getContainer().getBoundingClientRect();
+  const left = document.body.classList.contains('panel-collapsed') ? 60 : 330;
+  const worldW = 512; // largura do mundo no zoom 0 (tile 0/0/0 do Equal Earth)
+  const worldH = worldW * 0.4866; // proporção altura/largura do Equal Earth
+  const zoom = Math.log2(Math.min((width - left - 40) / worldW, (height - 110) / worldH));
+  map.easeTo({ center: [0, 0], zoom, pitch: 0, bearing: 0, padding: { ...NO_PADDING, left }, duration: 700 });
+}
 
 function setSeg(container, attr, value) {
   for (const btn of container.querySelectorAll(`[${attr}]`)) {
@@ -275,9 +359,13 @@ setSeg(projSeg, 'data-projection', state.projection);
 projSeg.addEventListener('click', (ev) => {
   const btn = ev.target.closest('[data-projection]');
   if (!btn) return;
+  if (btn.dataset.projection === state.projection) return;
   state.projection = btn.dataset.projection;
-  map.setProjection({ type: state.projection });
+  // As URLs de todas as fontes mudam (tiles reprojetados), então troca o estilo inteiro.
+  map.setStyle(buildStyle(), { diff: false });
+  map.once('style.load', () => (isEqualEarth() ? fitWorld() : map.easeTo({ padding: NO_PADDING, duration: 0 })));
   setSeg(projSeg, 'data-projection', state.projection);
+  syncTerrainUi();
   persist();
 });
 
@@ -287,11 +375,18 @@ const exaggerationOut = $('#exaggeration-out');
 terrainToggle.checked = state.terrain;
 exaggeration.value = state.exaggeration;
 exaggerationOut.value = `${fmt(state.exaggeration, 1)}×`;
-$('#exaggeration-row').classList.toggle('disabled', !state.terrain);
+
+function syncTerrainUi() {
+  const ee = isEqualEarth();
+  terrainToggle.closest('.row').classList.toggle('disabled', ee);
+  terrainToggle.closest('.row').title = ee ? 'Terreno 3D disponível no modo Globo' : '';
+  $('#exaggeration-row').classList.toggle('disabled', ee || !state.terrain);
+}
+syncTerrainUi();
 
 terrainToggle.addEventListener('change', () => {
   state.terrain = terrainToggle.checked;
-  $('#exaggeration-row').classList.toggle('disabled', !state.terrain);
+  syncTerrainUi();
   applyTerrain();
   if (state.terrain && map.getPitch() < 30) map.easeTo({ pitch: 60, duration: 1200 });
   persist();
@@ -390,7 +485,7 @@ function updateGibsSource(o) {
   const g = resolveGibs(o);
   if (sourceUrls.get(o.id) === g.url) return;
   sourceUrls.set(o.id, g.url);
-  map.getSource(`src-${o.id}`).setTiles([g.url]);
+  map.getSource(`src-${o.id}`).setTiles(gibsTiles(o, g));
 }
 
 OVERLAYS.forEach(renderOverlay);
@@ -446,28 +541,86 @@ const fmtCoord = (lng, lat) =>
   `${fmt(Math.abs(lat), 4)}° ${lat >= 0 ? 'N' : 'S'}  ${fmt(Math.abs(lng), 4)}° ${lng >= 0 ? 'L' : 'O'}`;
 const fmtElev = (m) => (m >= 0 ? `${fmt(Math.round(m))} m` : `${fmt(Math.round(-m))} m de profundidade`);
 
+// Selo junto ao cursor com o valor de cada camada temática visível.
+const badge = $('#badge');
+const rgbCss = (c) => `rgb(${c[0]},${c[1]},${c[2]})`;
+
+// Zoom de leitura: o mesmo dos tiles na tela (já em cache), limitado ao da fonte.
+const probeZoom = (maxzoom) => Math.max(0, Math.min(maxzoom, Math.round(map.getZoom() + 1)));
+
+async function hoverRows(lng, lat) {
+  const jobs = [];
+  if (state.overlays.relief.visible) {
+    jobs.push(
+      elevationAt(lng, lat, probeZoom(12)).then((m) =>
+        m == null ? null : { name: OVERLAYS[0].short, value: fmtElev(m), color: reliefColor(m) },
+      ),
+    );
+  }
+  for (const o of OVERLAYS) {
+    if (!o.gibs || !state.overlays[o.id].visible) continue;
+    const g = resolveGibs(o);
+    if (!g.info.colormap) continue;
+    jobs.push(
+      colormapEntryAt(g.url, probeZoom(g.info.maxzoom), g.info.colormap, lng, lat).then((e) =>
+        e ? { name: o.short ?? o.name, value: `${o.format(e)}${o.unit ? ` ${o.unit}` : ''}`, color: rgbCss(e.rgb) } : null,
+      ),
+    );
+  }
+  return (await Promise.all(jobs)).filter(Boolean);
+}
+
+function reliefColor(m) {
+  let c = RELIEF_STOPS[0][1];
+  for (const [h, color] of RELIEF_STOPS) if (m >= h) c = color;
+  return c;
+}
+
+function placeBadge(point) {
+  const { width, height } = map.getContainer().getBoundingClientRect();
+  const w = badge.offsetWidth;
+  const h = badge.offsetHeight;
+  const x = point.x + 18 + w > width ? point.x - 14 - w : point.x + 18;
+  const y = Math.min(Math.max(point.y - h / 2, 8), height - h - 8);
+  badge.style.transform = `translate(${x}px, ${y}px)`;
+}
+
 let hoverSeq = 0;
 let hoverPending = false;
 let lastHover = null;
 map.on('mousemove', (ev) => {
-  lastHover = ev.lngLat;
+  lastHover = ev;
   coordsEl.textContent = fmtCoord(ev.lngLat.lng, ev.lngLat.lat);
+  // Arrastando: só navega, sem selo.
+  if (ev.originalEvent.buttons) {
+    badge.hidden = true;
+    return;
+  }
+  if (!badge.hidden) placeBadge(ev.point);
   if (hoverPending) return;
   hoverPending = true;
   setTimeout(async () => {
     hoverPending = false;
     const seq = ++hoverSeq;
-    const { lng, lat } = lastHover;
+    const { lngLat, point } = lastHover;
     const z = Math.max(3, Math.min(12, Math.round(map.getZoom()) + 1));
-    const elev = await elevationAt(lng, lat, z);
-    if (seq === hoverSeq) elevEl.textContent = elev == null ? '' : fmtElev(elev);
-  }, 120);
+    const [elev, rows] = await Promise.all([elevationAt(lngLat.lng, lngLat.lat, z), hoverRows(lngLat.lng, lngLat.lat)]);
+    if (seq !== hoverSeq) return;
+    elevEl.textContent = elev == null ? '' : fmtElev(elev);
+    badge.hidden = rows.length === 0;
+    badge.innerHTML = rows
+      .map((r) => `<div class="badge-row"><i style="background:${r.color}"></i><span>${esc(r.name)}</span><b>${esc(r.value)}</b></div>`)
+      .join('');
+    if (rows.length) placeBadge(lastHover.point ?? point);
+  }, 90);
 });
 map.on('mouseout', () => {
   hoverSeq++;
   coordsEl.textContent = '—';
   elevEl.textContent = '';
+  badge.hidden = true;
 });
+map.on('movestart', () => (badge.hidden = true));
 
 // ---------------------------------------------------------------- informações do ponto
 
