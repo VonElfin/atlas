@@ -9,6 +9,15 @@ export const TERRARIUM_TILES = [
   'https://elevation-tiles-prod.s3.amazonaws.com/terrarium/{z}/{x}/{y}.png',
 ];
 export const TERRARIUM = TERRARIUM_TILES[0];
+
+// Mapterhorn: elevação (só terra, sem batimetria) via CDN Cloudflare. Medido daqui:
+// ~75 ms por tile, contra 450–630 ms do Terrarium no S3 (EUA, sem CDN). Tiles de 512 px,
+// mesma codificação terrarium. Usado no sombreamento, no terreno 3D e na elevação em terra;
+// o Terrarium fica para a camada de batimetria e para a profundidade dos oceanos.
+export const MAPTERHORN = 'https://tiles.mapterhorn.com/{z}/{x}/{y}.webp';
+export const MAPTERHORN_MAXZOOM = 12; // cobertura global até z12 (mais só em algumas regiões)
+export const MAPTERHORN_ATTR =
+  'Elevação: <a href="https://mapterhorn.com/attribution" target="_blank">© Mapterhorn</a>';
 const TERRARIUM_ATTR =
   'Elevação: <a href="https://registry.opendata.aws/terrain-tiles/" target="_blank">Mapzen/AWS Terrain Tiles</a>';
 const GIBS_ATTR = '<a href="https://earthdata.nasa.gov/gibs" target="_blank">NASA GIBS</a>';
@@ -104,7 +113,7 @@ export const OVERLAYS = [
     kind: 'hillshade',
     opacity: 0.6,
     visible: true,
-    attribution: TERRARIUM_ATTR,
+    attribution: MAPTERHORN_ATTR,
   },
   {
     id: 'population',
@@ -199,3 +208,7 @@ const edge = (e) => e.lo ?? e.hi;
 export function gibsUrl(info, id, time) {
   return `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${id}/default/${time}/${info.matrixSet}/{z}/{y}/{x}.${info.ext}`;
 }
+
+// O GIBS fala HTTP/1.1 (6 conexões por host); gibs-a/b/c são espelhos do mesmo serviço.
+export const gibsShards = (url) =>
+  ['gibs', 'gibs-a', 'gibs-b', 'gibs-c'].map((h) => url.replace('//gibs.earthdata', `//${h}.earthdata`));

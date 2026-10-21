@@ -1,12 +1,26 @@
 import * as maplibregl from '../vendor/maplibre/maplibre-gl.mjs';
-import { BASEMAPS, LABELS, OVERLAYS, RELIEF_STOPS, TERRARIUM_TILES, gibsUrl } from './layers.js';
+import {
+  BASEMAPS,
+  LABELS,
+  MAPTERHORN,
+  MAPTERHORN_ATTR,
+  MAPTERHORN_MAXZOOM,
+  OVERLAYS,
+  RELIEF_STOPS,
+  TERRARIUM_TILES,
+  gibsShards,
+  gibsUrl,
+} from './layers.js';
 import { colormapLegend, reliefLegend } from './legend.js';
 import { colormapEntryAt, elevationAt } from './probe.js';
 import { climographSvg, fetchNormals, koppen, koppenName } from './climate.js';
-import { fallbackUrl, registerProtocols } from './tiles.js';
+import { cachedUrl, fallbackUrl, registerProtocols } from './tiles.js';
+import { setupPrefetch } from './prefetch.js';
 
 registerProtocols(maplibregl);
-maplibregl.setMaxParallelImageRequests(24);
+// Com os hosts espelhados (Esri x2, S3 x2, GIBS x4, CARTO x4) há bem mais de 24
+// conexões disponíveis; o limite do MapLibre era o gargalo.
+maplibregl.setMaxParallelImageRequests(48);
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -166,19 +180,22 @@ const vis = (on) => (on ? 'visible' : 'none');
 
 const SPACE = '#04060d';
 
-// Tiles de 256 px exibidos em ~181 px: o MapLibre escolhe meio nível de zoom
-// acima e a imagem nunca é ampliada (com 256 px ela chega a 1,41×, borrando).
-const SHARP_TILE = Math.round(256 / Math.min(2, (window.devicePixelRatio || 1) * Math.SQRT2));
+// Tiles de 256 px exibidos em ~213 px: o MapLibre escolhe um nível de zoom um pouco
+// acima e a imagem é ampliada no máximo 1,18× (com 256 px chega a 1,41×, borrando).
+// Com 181 px a ampliação sumia, mas eram 2× mais tiles, e o Esri trava sob carga.
+const SHARP_TILE = Math.round(256 / Math.min(2, (window.devicePixelRatio || 1) * 1.2));
 
-// Fontes com fallback passam pelo protocolo próprio, que troca tiles ausentes
-// pelo ancestral ampliado.
-const tileUrls = (templates, fallback = 0) => (fallback ? templates.map((t) => fallbackUrl(t, fallback)) : templates);
+// Fontes de servidores que às vezes travam (Esri, S3) passam pelo nosso fetch, com
+// timeout e pedido de reserva; com `fallback` > 0 tiles ausentes viram o ancestral ampliado.
+const tileUrls = (templates, fallback = 0) => templates.map((t) => fallbackUrl(t, fallback));
+// GIBS: espelhos para mais conexões, servidos pelo cache de bytes (o servidor manda no-store).
+const gibsTiles = (url) => gibsShards(url).map(cachedUrl);
 
 function buildStyle() {
   const sources = {
     dem: {
       type: 'raster-dem',
-      tiles: TERRARIUM_TILES,
+      tiles: tileUrls(TERRARIUM_TILES, 0),
       encoding: 'terrarium',
       tileSize: 256,
       maxzoom: 12,
@@ -186,14 +203,17 @@ function buildStyle() {
     },
     labels: {
       type: 'raster',
-      tiles: LABELS.tiles,
+      tiles: tileUrls(LABELS.tiles, 0),
       tileSize: 256,
       maxzoom: LABELS.maxzoom,
       attribution: LABELS.attribution,
     },
   };
-  // Fonte do terreno 3D separada da do sombreamento, como recomenda o MapLibre.
-  sources['terrain-dem'] = { type: 'raster-dem', tiles: TERRARIUM_TILES, encoding: 'terrarium', tileSize: 256, maxzoom: 13 };
+  // Sombreamento e terreno 3D: Mapterhorn (CDN, ~6× mais rápido que o S3). Fontes
+  // separadas com as mesmas URLs, como recomenda o MapLibre; o cache HTTP é compartilhado.
+  const mapterhorn = { type: 'raster-dem', tiles: [MAPTERHORN], encoding: 'terrarium', tileSize: 512, maxzoom: MAPTERHORN_MAXZOOM };
+  sources['hs-dem'] = { ...mapterhorn, attribution: MAPTERHORN_ATTR };
+  sources['terrain-dem'] = { ...mapterhorn };
   const layers = [{ id: 'space', type: 'background', paint: { 'background-color': SPACE } }];
 
   for (const b of BASEMAPS) {
@@ -201,7 +221,7 @@ function buildStyle() {
     const maxzoom = info ? info.maxzoom : b.maxzoom;
     sources[`base-${b.id}`] = {
       type: 'raster',
-      tiles: tileUrls(info ? [gibsUrl(info, b.gibs, info.defaultTime)] : b.tiles, b.fallback),
+      tiles: info ? gibsTiles(gibsUrl(info, b.gibs, info.defaultTime)) : tileUrls(b.tiles, b.fallback),
       tileSize: SHARP_TILE,
       maxzoom,
       attribution: b.attribution,
@@ -223,7 +243,7 @@ function buildStyle() {
       layer.source = 'dem';
       layer.paint['color-relief-color'] = ['interpolate', ['linear'], ['elevation'], ...RELIEF_STOPS.flat()];
     } else if (type === 'hillshade') {
-      layer.source = 'dem';
+      layer.source = 'hs-dem';
       layer.paint['hillshade-shadow-color'] = '#1b1f2e';
       layer.paint['hillshade-highlight-color'] = '#ffffff';
     } else {
@@ -231,7 +251,7 @@ function buildStyle() {
       sourceUrls.set(o.id, g.url);
       sources[`src-${o.id}`] = {
         type: 'raster',
-        tiles: [g.url],
+        tiles: gibsTiles(g.url),
         tileSize: 256,
         maxzoom: g.info.maxzoom,
         attribution: `${o.source ? `${esc(o.source)} · ` : ''}<a href="https://earthdata.nasa.gov/gibs" target="_blank">NASA GIBS</a>`,
@@ -300,12 +320,20 @@ const map = new maplibregl.Map({
 });
 // Gancho para testes e benchmark: só com `--debug` na linha de comando ou `?debug` na URL.
 if ((window.NL_ARGS ?? []).includes('--debug') || location.search.includes('debug')) {
-  window.atlas = { map, state, resolveGibs };
+  window.atlas = { map, state, resolveGibs, prefetchStats: () => prefetchStats };
 }
 map.addControl(new maplibregl.NavigationControl({ visualizePitch: true, showZoom: true }), 'top-right');
 map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right');
 
+// Tile que travou nas 3 tentativas ou foi cancelado: o MapLibre mantém o tile pai
+// no lugar. Não é erro do app; o resto vai para o console como antes.
+map.on('error', (ev) => {
+  const name = ev.error?.name;
+  if (name === 'TimeoutError' || name === 'AbortError') return;
+  console.error(ev.error ?? ev);
+});
 map.on('moveend', persist);
+const prefetchStats = setupPrefetch(map);
 map.on('style.load', tuneImageryLod);
 
 const loading = $('#status-loading');
@@ -446,7 +474,7 @@ function updateGibsSource(o) {
   const g = resolveGibs(o);
   if (sourceUrls.get(o.id) === g.url) return;
   sourceUrls.set(o.id, g.url);
-  map.getSource(`src-${o.id}`).setTiles([g.url]);
+  map.getSource(`src-${o.id}`).setTiles(gibsTiles(g.url));
 }
 
 OVERLAYS.forEach(renderOverlay);

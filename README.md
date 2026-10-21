@@ -40,21 +40,27 @@ O executável depende só do WebView2, que já vem no Windows 10/11. Ele também
 |---|---|---|
 | Satélite | Esri World Imagery | até ~0,3 m |
 | Blue Marble | NASA GIBS | ~500 m |
-| Altitude/batimetria, sombreamento, terreno 3D | AWS Terrain Tiles (Terrarium) | ~30 m em terra |
+| Sombreamento e terreno 3D | Mapterhorn (CDN) | ~30 m |
+| Altitude e batimetria | AWS Terrain Tiles (Terrarium) | ~30 m em terra |
 | Densidade populacional 2000–2020 | NASA SEDAC GPWv4 | ~1 km |
 | Luzes noturnas 2012/2016 | NASA Black Marble | ~500 m |
 | Temperatura e precipitação mensais | NASA MERRA-2 | ~50 km |
 | Vegetação (NDVI) mensal | MODIS Terra | ~1 km |
 | Cobertura do solo 2001–2024 | MODIS IGBP | ~500 m |
-| Normais climáticas (clique) | ERA5 via Open-Meteo | ~25 km |
+| Normais climáticas (clique) | NASA POWER (MERRA-2, 2001–2025) | ~50 km |
 | Busca e nomes de lugares | OpenStreetMap Nominatim | — |
 
 ## Como funciona
 
 - **Sem tiles cinza:** o satélite é pedido com `blankTile=false`. Onde o Esri não tem imagem naquele zoom, o app usa o tile ancestral ampliado em vez do aviso "Map data not yet available".
 - **Inclinação:** abaixo do z12 o Esri usa outro mosaico, bem mais escuro. Com a câmera perto do chão, os tiles distantes não descem abaixo do z12, o que evita a faixa escura no horizonte.
-- **Nitidez:** os tiles de satélite são exibidos a ~181 px em vez de 256 px, para nunca serem ampliados entre níveis de zoom.
-- **Carregamento:** cada servidor de tiles é acessado por dois hostnames, o que dobra as conexões HTTP/1.1 em paralelo.
+- **Nitidez:** os tiles de satélite são exibidos a ~213 px em vez de 256 px, o que reduz a ampliação entre níveis de zoom.
+- **Carregamento:**
+  - Pré-carregamento: quando o mapa para, o app baixa em segundo plano um anel de tiles ao redor da tela e os níveis de zoom vizinhos. Qualquer movimento cancela.
+  - O Esri segura ~10% das requisições por 30–60 s. Tile sem resposta em 1,2 s ganha um pedido de reserva no outro host; sem resposta em 5 s, a conexão é liberada e o tile é pedido de novo.
+  - Tiles já baixados saem do cache em disco sem consultar o servidor.
+  - O NASA GIBS proíbe cache (`no-store`); o app guarda esses tiles em memória durante a sessão.
+  - Cada servidor é acessado por vários hostnames, o que multiplica as conexões em paralelo.
 
 Para ler o valor de um ponto, o app pega a cor do pixel no próprio tile e a converte de volta pelo colormap publicado pela NASA. A elevação é decodificada do tile Terrarium. Não é preciso nenhuma chave de API.
 
