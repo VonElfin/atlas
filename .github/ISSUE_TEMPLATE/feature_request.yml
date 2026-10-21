@@ -1,0 +1,16 @@
+name: Sugerir uma melhoria ou camada
+description: Uma ideia de recurso, camada de dados ou melhoria.
+labels: [melhoria]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: O que você gostaria?
+      description: Descreva a ideia e para que ela serviria.
+    validations:
+      required: true
+  - type: input
+    id: source
+    attributes:
+      label: Fonte dos dados (se for uma camada)
+      description: Link para o serviço ou conjunto de dados. Precisa ser aberto e não exigir chave de API.

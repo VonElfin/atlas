@@ -40,9 +40,10 @@ export const BASEMAPS = [
   {
     id: 'dark',
     name: 'Escuro',
-    tiles: ['a', 'b', 'c', 'd'].map((h) => `https://${h}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png`),
-    maxzoom: 19,
-    attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a>, © <a href="https://carto.com" target="_blank">CARTO</a>',
+    // A CARTO passou a exigir chave de API (tiles com marca d'água); o Esri é aberto.
+    tiles: esri('Canvas/World_Dark_Gray_Base'),
+    maxzoom: 16,
+    attribution: 'Mapa escuro © <a href="https://www.esri.com" target="_blank">Esri</a>, HERE, Garmin, © OpenStreetMap',
   },
 ];
 

@@ -18,7 +18,7 @@ import { cachedUrl, fallbackUrl, registerProtocols } from './tiles.js';
 import { setupPrefetch } from './prefetch.js';
 
 registerProtocols(maplibregl);
-// Com os hosts espelhados (Esri x2, S3 x2, GIBS x4, CARTO x4) há bem mais de 24
+// Com os hosts espelhados (Esri x2, S3 x2, GIBS x4) e o Mapterhorn (HTTP/2) há bem mais de 24
 // conexões disponíveis; o limite do MapLibre era o gargalo.
 maplibregl.setMaxParallelImageRequests(48);
 

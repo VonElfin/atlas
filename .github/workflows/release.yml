@@ -1,0 +1,53 @@
+# Gera o instalador do Windows e publica a release quando uma tag vX.Y.Z é enviada.
+#   git tag v1.0.0 && git push origin v1.0.0
+name: Release
+
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch: # permite rodar à mão pela aba Actions (gera o instalador como artefato)
+
+permissions:
+  contents: write # necessário para criar a release
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Conferir versão (tag x package.json x neutralino.config.json)
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg=$(node -p "require('./package.json').version")
+          neu=$(node -p "require('./neutralino.config.json').version")
+          echo "tag=$tag package.json=$pkg neutralino.config.json=$neu"
+          if [ "$tag" != "$pkg" ] || [ "$tag" != "$neu" ]; then
+            echo "::error::A tag v$tag não bate com as versões dos arquivos."
+            exit 1
+          fi
+
+      - run: npm ci
+      - name: Baixar binários do Neutralinojs
+        run: npx neu update
+      - name: Gerar instalador
+        run: npm run installer
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: instalador-windows
+          path: release/*.exe
+
+      - name: Publicar release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*.exe
+          generate_release_notes: true

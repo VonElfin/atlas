@@ -1205,5 +1205,6 @@ Dados e imagens (carregados pela internet durante o uso)
 - Elevação (sombreamento e terreno 3D): Mapterhorn - https://mapterhorn.com/attribution
 - Batimetria e elevação no oceano: Mapzen / AWS Terrain Tiles
 - Normais climáticas: NASA POWER (MERRA-2) - https://power.larc.nasa.gov
-- Mapa escuro e busca de lugares: OpenStreetMap contributors, CARTO,
-  Nominatim - https://www.openstreetmap.org/copyright
+- Mapa escuro: Esri, HERE, Garmin, OpenStreetMap contributors
+- Busca de lugares: Nominatim / OpenStreetMap contributors -
+  https://www.openstreetmap.org/copyright

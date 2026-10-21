@@ -1,0 +1,38 @@
+name: Relatar um problema
+description: Algo não funciona como deveria.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: O que aconteceu?
+      description: Descreva o problema e o que você esperava que acontecesse.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Como reproduzir
+      placeholder: |
+        1. Ligar a camada "Temperatura"
+        2. Ir até ...
+        3. Clicar em ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Versão do Atlas
+      placeholder: "1.0.0"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Windows
+      placeholder: "Windows 11 23H2"
+  - type: textarea
+    id: extra
+    attributes:
+      label: Capturas de tela ou mensagens de erro
+      description: Se possível, inclua uma captura de tela.

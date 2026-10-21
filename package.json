@@ -1,7 +1,31 @@
 {
   "name": "atlas",
-  "version": "0.1.0",
-  "description": "Globo interativo desktop: relevo, população, clima e mais",
+  "version": "1.0.0",
+  "description": "Globo interativo para desktop: relevo, população, clima e mais, sobre imagens de satélite, com terreno 3D.",
+  "author": "Marco Ryan",
+  "license": "MIT",
+  "homepage": "https://github.com/VonElfin/atlas#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/VonElfin/atlas.git"
+  },
+  "bugs": {
+    "url": "https://github.com/VonElfin/atlas/issues"
+  },
+  "keywords": [
+    "map",
+    "globe",
+    "gis",
+    "maplibre",
+    "neutralinojs",
+    "nasa",
+    "climate",
+    "desktop"
+  ],
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "neu run",
     "dev": "neu run -- --window-enable-inspector=true",
@@ -11,10 +35,8 @@
     "setup": "neu update",
     "installer": "node scripts/build-installer.mjs"
   },
-  "type": "commonjs",
   "devDependencies": {
     "@neutralinojs/neu": "^11.8.0",
     "innosetup": "^6.4.1"
-  },
-  "private": true
+  }
 }

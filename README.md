@@ -1,89 +1,185 @@
+<div align="center">
+
+<img src="docs/icon.png" width="80" alt="">
+
 # Atlas
 
-Globo interativo para desktop: relevo, densidade populacional, clima e outras camadas sobre imagens de satélite, com terreno 3D.
+**Globo interativo para desktop: relevo, população, clima e mais, sobre imagens de satélite, com terreno 3D.**
 
-## Rodar
+[![Release](https://img.shields.io/github/v/release/VonElfin/atlas?label=vers%C3%A3o)](https://github.com/VonElfin/atlas/releases/latest)
+[![Licença: MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-blue)](LICENSE)
+![Windows 10/11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4)
+![Instalador ~3 MB](https://img.shields.io/badge/instalador-~3%20MB-success)
 
-```bash
-npm install
-npm run setup     # baixa os binários do Neutralino (bin/) e resources/js/neutralino.js
-npm start         # abre a janela em modo de desenvolvimento
-npm run dev       # idem, com DevTools (F12)
-npm run build     # gera dist/atlas/atlas-win_x64.exe (executável único, ~4 MB)
-npm run installer # build + instalador: release/Atlas-Setup-<versão>.exe (~3 MB)
-```
+[**Baixar para Windows**](https://github.com/VonElfin/atlas/releases/latest) · [Recursos](#recursos) · [Compilar](#compilar-a-partir-do-código) · [Como funciona](#como-funciona) · [Contribuir](CONTRIBUTING.md)
 
-O executável depende só do WebView2, que já vem no Windows 10/11. Ele também é gerado para Linux e macOS.
+<img src="docs/shot-globe.png" alt="Globo com densidade populacional e a ficha de clima de um ponto" width="900">
 
-## Instalador para amigos
+</div>
 
-`npm run installer` gera `release/Atlas-Setup-<versão>.exe`. É só enviar esse arquivo.
+## Sobre
 
-- Instala só para o usuário atual, sem pedir administrador (em `%LOCALAPPDATA%ProgramsAtlas`), cria atalho no menu Iniciar (e na área de trabalho, se marcado) e aparece em "Aplicativos instalados" para desinstalar.
-- Português do Brasil ou inglês, conforme o Windows.
-- Se o Windows não tiver o WebView2 (já vem no Windows 11 e no Windows 10 atualizado), o instalador baixa o componente oficial da Microsoft.
-- Rodar o instalador de novo atualiza a versão instalada. Para uma versão nova, mude `version` em package.json.
-- **O instalador não é assinado digitalmente**, então o Windows SmartScreen mostra "O Windows protegeu o computador". Quem for instalar clica em **Mais informações → Executar assim mesmo**. Remover o aviso exige um certificado de assinatura de código (pago).
+O Atlas é um explorador de mapas para desktop no estilo do Google Earth, focado em **dados geográficos abertos**. Mostra relevo, densidade populacional, temperatura, precipitação, vegetação, cobertura do solo e luzes noturnas sobre o globo, e informa o valor exato de cada camada em qualquer ponto.
+
+Ele é leve de propósito. Em vez de embutir um navegador inteiro (como o Electron), usa o WebView2 que já vem no Windows e desenha tudo na GPU com WebGL2. O instalador tem cerca de 3 MB, e o app usa ~2% de um núcleo de CPU quando está parado.
+
+Não precisa de conta nem de chave de API: todos os dados vêm de serviços públicos (NASA, Esri, OpenStreetMap, Mapterhorn).
+
+## Recursos
+
+- **Globo 3D ou mapa plano**, com atmosfera, inclinação e rotação livres.
+- **Terreno 3D** com exagero vertical ajustável.
+- **Camadas temáticas** com legenda e opacidade ajustável:
+
+  | Grupo | Camada | Período |
+  |---|---|---|
+  | Relevo | Altitude e batimetria, sombreamento | — |
+  | Sociedade | Densidade populacional | 2000, 2005, 2010, 2015, 2020 |
+  | Sociedade | Luzes noturnas | 2012, 2016 |
+  | Clima | Temperatura do ar, precipitação | mensal, de 1980 até hoje |
+  | Natureza | Vegetação (NDVI) | mensal, de 2000 até hoje |
+  | Natureza | Cobertura do solo | anual, 2001–2024 |
+
+- **Valores, não só cores:** ao passar o mouse, um selo mostra o valor de cada camada ligada (ex.: "Temperatura 22,9 °C").
+- **Ficha de qualquer ponto** (clique): nome do lugar, elevação, valor de todas as camadas, **classificação climática de Köppen-Geiger** e climograma com as médias mensais.
+- **Linha do tempo** para as camadas mensais, com animação mês a mês.
+- **Busca de lugares** (Ctrl+K).
+- **Mapas base:** satélite, Blue Marble (NASA) e escuro.
+- Lembra as camadas, o mapa base e a posição da câmera entre sessões.
+
+<table>
+  <tr>
+    <td><img src="docs/shot-terrain.png" alt="Terreno 3D inclinado sobre o Rio de Janeiro"></td>
+    <td><img src="docs/shot-climate.png" alt="Temperatura média de julho no mapa plano, com o selo de valor"></td>
+  </tr>
+  <tr>
+    <td align="center">Terreno 3D (Rio de Janeiro)</td>
+    <td align="center">Temperatura média de julho, com o selo de valor</td>
+  </tr>
+</table>
+
+## Instalação
+
+1. Baixe `Atlas-Setup-<versão>.exe` na [página de releases](https://github.com/VonElfin/atlas/releases/latest).
+2. Execute. A instalação é por usuário, não pede administrador e cria um atalho no menu Iniciar.
+3. Para desinstalar: **Configurações → Aplicativos → Atlas → Desinstalar**.
+
+> [!NOTE]
+> O instalador ainda não é assinado digitalmente, então o Windows SmartScreen pode mostrar "O Windows protegeu o computador". Clique em **Mais informações → Executar assim mesmo**. O instalador é gerado pelo [workflow público](.github/workflows/release.yml) a partir deste código.
+
+**Requisitos:** Windows 10 ou 11 (64 bits) e conexão com a internet. O app usa o Microsoft WebView2, que já vem no Windows 11 e no Windows 10 atualizado; se faltar, o instalador o baixa da Microsoft.
 
 ## Uso
 
-- **Arrastar** gira o globo. **Botão direito ou Ctrl + arrastar** inclina e rotaciona. **Roda do mouse** dá zoom.
-- **Passe o mouse** sobre o mapa para ver um selo com o valor de cada camada temática ligada (densidade, temperatura, precipitação, altitude…).
-- **Clique** em um ponto para ver: elevação, densidade populacional, temperatura e precipitação do mês escolhido, NDVI, cobertura do solo, classificação de Köppen-Geiger e climograma das normais de 1991–2020.
-- **Ctrl+K** abre a busca de lugares. **Esc** fecha painéis.
-- **Globo / Plano** alterna entre o globo 3D e o mapa plano (Mercator).
-- **Data dos dados mensais** troca o mês das camadas de clima e vegetação. O ▶ anima mês a mês.
+| Ação | Como |
+|---|---|
+| Girar / mover | arrastar |
+| Inclinar e rotacionar | botão direito + arrastar, ou Ctrl + arrastar |
+| Zoom | roda do mouse |
+| Ficha de um ponto | clique |
+| Buscar lugar | Ctrl+K, digite e Enter |
+| Fechar painéis | Esc |
 
-## Camadas
+## Compilar a partir do código
 
-| Camada | Fonte | Resolução |
-|---|---|---|
-| Satélite | Esri World Imagery | até ~0,3 m |
-| Blue Marble | NASA GIBS | ~500 m |
-| Sombreamento e terreno 3D | Mapterhorn (CDN) | ~30 m |
-| Altitude e batimetria | AWS Terrain Tiles (Terrarium) | ~30 m em terra |
-| Densidade populacional 2000–2020 | NASA SEDAC GPWv4 | ~1 km |
-| Luzes noturnas 2012/2016 | NASA Black Marble | ~500 m |
-| Temperatura e precipitação mensais | NASA MERRA-2 | ~50 km |
-| Vegetação (NDVI) mensal | MODIS Terra | ~1 km |
-| Cobertura do solo 2001–2024 | MODIS IGBP | ~500 m |
-| Normais climáticas (clique) | NASA POWER (MERRA-2, 2001–2025) | ~50 km |
-| Busca e nomes de lugares | OpenStreetMap Nominatim | — |
+Pré-requisitos: [Node.js](https://nodejs.org) 20 ou mais recente e Windows (para gerar o instalador).
+
+```bash
+git clone https://github.com/VonElfin/atlas.git
+cd atlas
+npm install
+npm run setup        # baixa os binários do Neutralinojs (bin/ e resources/js/neutralino.js)
+npm start            # abre o app em modo de desenvolvimento
+```
+
+| Comando | O que faz |
+|---|---|
+| `npm start` | Abre o app lendo `resources/` direto do disco |
+| `npm run dev` | Igual, com DevTools (F12) |
+| `npm run build` | Gera os executáveis em `dist/atlas/` (Windows, Linux e macOS) |
+| `npm run installer` | Build + instalador `release/Atlas-Setup-<versão>.exe` (Inno Setup; só no Windows) |
+| `npm run catalog` | Atualiza o catálogo de camadas da NASA (datas disponíveis e paletas) |
+| `npm run icon` | Regenera os ícones |
+
+O executável também é gerado para Linux e macOS, mas só a versão Windows é testada e distribuída.
 
 ## Como funciona
 
-- **Sem tiles cinza:** o satélite é pedido com `blankTile=false`. Onde o Esri não tem imagem naquele zoom, o app usa o tile ancestral ampliado em vez do aviso "Map data not yet available".
-- **Inclinação:** abaixo do z12 o Esri usa outro mosaico, bem mais escuro. Com a câmera perto do chão, os tiles distantes não descem abaixo do z12, o que evita a faixa escura no horizonte.
-- **Nitidez:** os tiles de satélite são exibidos a ~213 px em vez de 256 px, o que reduz a ampliação entre níveis de zoom.
-- **Carregamento:**
-  - Pré-carregamento: quando o mapa para, o app baixa em segundo plano um anel de tiles ao redor da tela e os níveis de zoom vizinhos. Qualquer movimento cancela.
-  - O Esri segura ~10% das requisições por 30–60 s. Tile sem resposta em 1,2 s ganha um pedido de reserva no outro host; sem resposta em 5 s, a conexão é liberada e o tile é pedido de novo.
-  - Tiles já baixados saem do cache em disco sem consultar o servidor.
-  - O NASA GIBS proíbe cache (`no-store`); o app guarda esses tiles em memória durante a sessão.
-  - Cada servidor é acessado por vários hostnames, o que multiplica as conexões em paralelo.
+**Stack.** [Neutralinojs](https://neutralino.js.org) cria a janela nativa sobre o WebView2 do sistema e [MapLibre GL JS](https://maplibre.org) desenha o mapa em WebGL2. A interface é HTML, CSS e JavaScript, sem framework nem etapa de build.
 
-Para ler o valor de um ponto, o app pega a cor do pixel no próprio tile e a converte de volta pelo colormap publicado pela NASA. A elevação é decodificada do tile Terrarium. Não é preciso nenhuma chave de API.
+**Valor de um pixel.** As camadas da NASA são imagens coloridas, não dados numéricos. O app baixa o mesmo tile que está na tela, lê a cor do pixel sob o cursor e a converte de volta em valor pela paleta que a NASA publica (por exemplo, `rgb(240,59,32)` vira "250–500 hab/km²"). A elevação vem de tiles em que a altitude está codificada nos canais RGB.
 
-## Adicionar uma camada
+**Clima de um ponto.** A ficha consulta a climatologia mensal da NASA POWER (12 valores, ~1,5 KB) e calcula a classificação de Köppen-Geiger com os critérios de Peel et al. (2007). Num teste com 27 cidades de referência, 25 bateram com a classificação publicada; as outras duas divergem por causa da grade de ~50 km.
 
-1. Ache o id da camada no [GetCapabilities do GIBS](https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/1.0.0/WMTSCapabilities.xml) e coloque em `LAYERS` em [scripts/build-catalog.mjs](scripts/build-catalog.mjs).
-2. Rode `npm run catalog`. Ele atualiza [resources/data/gibs-catalog.json](resources/data/gibs-catalog.json) com as datas disponíveis e o colormap.
-3. Adicione uma entrada em `OVERLAYS` em [resources/js/layers.js](resources/js/layers.js) e defina `format`/`unit` para o valor aparecer no clique.
+**Carregamento.**
+- Quando o mapa para, o app baixa em segundo plano os tiles ao redor da tela e dos níveis de zoom vizinhos. Qualquer movimento cancela.
+- Servidores que às vezes travam (Esri, S3) passam por um fetch com timeout de 5 s e *pedido de reserva*: sem resposta em 1,2 s, o mesmo tile é pedido também no host espelho.
+- O NASA GIBS proíbe cache (`no-store`), então o app guarda esses tiles em memória durante a sessão.
+- Tiles já baixados saem do cache em disco sem consultar o servidor.
 
-Rode `npm run catalog` de vez em quando para incluir os meses mais recentes.
+**Desempenho medido** no app nativo (Windows 11, GPU dedicada, janela de 1400×900):
 
-## Estrutura
+| Cenário | Resultado |
+|---|---|
+| Globo e mapa plano (pan, zoom, voos) | 65–160 fps |
+| Terreno 3D inclinado | 35–67 fps |
+| Clique até a ficha com clima | ~0,4 s |
+| CPU com o app parado | ~2% de um núcleo |
+| Memória | ~370 MB ao abrir; ~1,3 GB após uso pesado (inclui GPU) |
+
+### Estrutura
 
 ```
-neutralino.config.json   janela, permissões nativas, versão do runtime
 resources/
-  index.html, css/app.css
-  js/main.js             mapa, painel, tempo, clique, busca
-  js/layers.js           registro de mapas base e camadas
-  js/tiles.js            cache de tiles e fallback de tiles ausentes
-  js/probe.js            leitura de valores por pixel (elevação, colormaps)
-  js/climate.js          normais, Köppen-Geiger, climograma
-  js/legend.js           legendas
-  vendor/maplibre/       MapLibre GL JS 6.15 (WebGL2)
-  data/gibs-catalog.json gerado por scripts/build-catalog.mjs
+  index.html, css/app.css   interface
+  js/main.js                mapa, painel, linha do tempo, ficha do ponto, busca
+  js/layers.js              catálogo de mapas base e camadas (comece por aqui)
+  js/tiles.js               fetch robusto, caches, fallback de tiles ausentes
+  js/prefetch.js            pré-carregamento ao redor da tela
+  js/probe.js               leitura de valores por pixel
+  js/climate.js             normais climáticas, Köppen-Geiger, climograma
+  js/legend.js              legendas
+  data/gibs-catalog.json    gerado por scripts/build-catalog.mjs
+  vendor/maplibre/          MapLibre GL JS 6.15
+scripts/                    catálogo, ícones, instalador
+installer/                  script do Inno Setup, ícone, avisos de terceiros
+docs/                       imagens do README
+neutralino.config.json      janela, permissões nativas, versão
 ```
+
+### Adicionar uma camada
+
+1. Ache o id da camada no [GetCapabilities do NASA GIBS](https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/1.0.0/WMTSCapabilities.xml) e inclua em `LAYERS`, em [scripts/build-catalog.mjs](scripts/build-catalog.mjs).
+2. Rode `npm run catalog`.
+3. Adicione uma entrada em `OVERLAYS`, em [resources/js/layers.js](resources/js/layers.js), com `format` e `unit` para o valor aparecer no selo e na ficha.
+
+Mais detalhes em [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Limitações conhecidas
+
+- **Só Windows** é testado e distribuído.
+- **Precisa de internet:** não há modo offline.
+- **Resolução dos dados:** temperatura e precipitação têm células de ~50 km, e a densidade populacional, de ~1 km. De perto, essas camadas aparecem em blocos.
+- **Servidor público do Esri:** às vezes fica lento por alguns segundos. Enquanto isso o app mostra a versão menos detalhada do tile.
+- **Mapa plano:** usa Web Mercator, que distorce as áreas perto dos polos.
+
+## Fontes de dados
+
+| Dado | Fonte | Termos |
+|---|---|---|
+| Imagens de satélite, rótulos, mapa escuro | [Esri](https://www.esri.com), Maxar, Earthstar Geographics, HERE, Garmin | [Termos da Esri](https://www.esri.com/en-us/legal/terms/full-master-agreement) |
+| Blue Marble, luzes noturnas, MODIS, MERRA-2, população (SEDAC GPWv4) | [NASA GIBS / EOSDIS](https://earthdata.nasa.gov/gibs) | Dados abertos da NASA |
+| Elevação (sombreamento, terreno 3D) | [Mapterhorn](https://mapterhorn.com/attribution) | Ver página de atribuição |
+| Batimetria | [Mapzen / AWS Terrain Tiles](https://registry.opendata.aws/terrain-tiles/) | Ver registro |
+| Normais climáticas | [NASA POWER](https://power.larc.nasa.gov) | Dados abertos da NASA |
+| Busca e nomes de lugares | [Nominatim](https://nominatim.org) / © [OpenStreetMap](https://www.openstreetmap.org/copyright) | ODbL; [política de uso](https://operations.osmfoundation.org/policies/nominatim/) |
+
+Os créditos das camadas visíveis aparecem no canto inferior direito do mapa. A lista completa, com as licenças dos componentes, está em [installer/LICENSES.txt](installer/LICENSES.txt).
+
+## Contribuir
+
+Issues e pull requests são bem-vindos. O [CONTRIBUTING.md](CONTRIBUTING.md) explica como preparar o ambiente e traz o checklist de testes.
+
+## Licença
+
+Código sob a [Licença MIT](LICENSE). Os dados exibidos pertencem aos seus provedores e seguem os termos de cada um (veja [Fontes de dados](#fontes-de-dados)).
