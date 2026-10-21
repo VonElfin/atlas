@@ -7,3 +7,4 @@ dist/
 bin/
 resources/js/neutralino.js
 resources/js/neutralino.d.ts
+release/

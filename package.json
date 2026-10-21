@@ -8,11 +8,13 @@
     "build": "neu build --release --embed-resources",
     "catalog": "node scripts/build-catalog.mjs",
     "icon": "node scripts/make-icon.mjs",
-    "setup": "neu update"
+    "setup": "neu update",
+    "installer": "node scripts/build-installer.mjs"
   },
   "type": "commonjs",
   "devDependencies": {
-    "@neutralinojs/neu": "^11.8.0"
+    "@neutralinojs/neu": "^11.8.0",
+    "innosetup": "^6.4.1"
   },
   "private": true
 }

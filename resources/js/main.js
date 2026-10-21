@@ -272,11 +272,17 @@ function tuneImageryLod() {
   const id = 'base-satellite';
   const src = map.getSource(id);
   if (!src || src.atlasLod) return;
-  map.setSourceTileLodParams(7, 3, id);
+  // 9.314 e 3 são os valores padrão do MapLibre; só chamamos para ter a função de LOD
+  // (src.calculateTileZoom) e embrulhá-la. Com 7 níveis o terreno 3D caía a 14 fps
+  // e levava 35 s para carregar (medido no app nativo); com o padrão, 45 fps e 1,5 s.
+  map.setSourceTileLodParams(9.314, 3, id);
   const lod = src.calculateTileZoom;
   src.calculateTileZoom = (centerZoom, ...rest) => {
     const z = lod(centerZoom, ...rest);
-    return centerZoom >= ESRI_MOSAIC_ZOOM + 1 ? Math.max(z, ESRI_MOSAIC_ZOOM) : z;
+    // Usa o zoom real do mapa: o centerZoom recebido já vem somado de ~1,5 por causa do
+    // tile de 181 px, e com ele o piso valia a partir do zoom 11,5, forçando o horizonte
+    // inteiro (centenas de km) a carregar em z12 (14 fps no terreno 3D).
+    return map.getZoom() >= ESRI_MOSAIC_ZOOM + 1 ? Math.max(z, ESRI_MOSAIC_ZOOM) : z;
   };
   src.atlasLod = true;
 }
@@ -292,6 +298,10 @@ const map = new maplibregl.Map({
   dragRotate: true,
   touchPitch: true,
 });
+// Gancho para testes e benchmark: só com `--debug` na linha de comando ou `?debug` na URL.
+if ((window.NL_ARGS ?? []).includes('--debug') || location.search.includes('debug')) {
+  window.atlas = { map, state, resolveGibs };
+}
 map.addControl(new maplibregl.NavigationControl({ visualizePitch: true, showZoom: true }), 'top-right');
 map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right');
 
@@ -607,7 +617,7 @@ async function showPoint(lng, lat) {
       ${probes.map((o) => `<dt>${esc(o.name.replace(/ \(.*\)$/, ''))} <small>${esc(resolveGibs(o).label ?? '')}</small></dt><dd data-fact="${o.id}">…</dd>`).join('')}
     </dl>
     <section class="climate">
-      <h3>Clima <small>normais 1991–2020</small></h3>
+      <h3>Clima <small>normais 2001–2025</small></h3>
       <div data-fact="climate"><p class="muted">Calculando…</p></div>
     </section>`;
 
@@ -644,8 +654,8 @@ async function showPoint(lng, lat) {
          <dt>Precipitação anual</dt><dd>${fmt(Math.round(annualP))} mm</dd>
        </dl>
        ${climographSvg(n)}
-       <p class="legend-inline"><i class="sw-bar"></i>precipitação (mm) <i class="sw-line"></i>temp. média <i class="sw-band"></i>mín–máx (°C)</p>
-       <p class="source">Reanálise ERA5 via <a href="https://open-meteo.com" target="_blank">Open-Meteo</a>. Köppen-Geiger calculado com os critérios de Peel et al. (2007).</p>`,
+       <p class="legend-inline"><i class="sw-bar"></i>precipitação (mm) <i class="sw-line"></i>temp. média <i class="sw-band"></i>faixa diária (°C)</p>
+       <p class="source">Reanálise MERRA-2 via <a href="https://power.larc.nasa.gov" target="_blank">NASA POWER</a> (grade de ~50 km). Köppen-Geiger calculado com os critérios de Peel et al. (2007).</p>`,
     );
   } catch (err) {
     if (!abort.signal.aborted) fill('climate', `<p class="muted">Não foi possível obter dados climáticos (${esc(err.message)}).</p>`);

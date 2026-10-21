@@ -8,8 +8,7 @@ const TILE = 256;
 // Posição (tile e pixel) de um lng/lat em Web Mercator no zoom z.
 function locate(lng, lat, z) {
   const n = 2 ** z;
-  const clampedLat = Math.max(-85.0511, Math.min(85.0511, lat));
-  const rad = (clampedLat * Math.PI) / 180;
+  const rad = (lat * Math.PI) / 180;
   const fx = ((((lng + 180) / 360) % 1) + 1) % 1 * n;
   const fy = ((1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2) * n;
   const x = Math.min(n - 1, Math.floor(fx));
@@ -22,7 +21,12 @@ function locate(lng, lat, z) {
   };
 }
 
+// Os tiles Web Mercator não cobrem acima desta latitude; fora dela não há valor a ler
+// (antes o ponto era "grudado" na borda e mostrava o valor de outro lugar).
+const MAX_LAT = 85.0511;
+
 async function samplePixel(template, z, lng, lat) {
+  if (Math.abs(lat) > MAX_LAT) return null;
   const { x, y, px, py } = locate(lng, lat, z);
   const img = await tileImage(template, z, x, y);
   if (!img) return null;

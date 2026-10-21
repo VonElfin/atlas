@@ -10,9 +10,20 @@ npm run setup     # baixa os binários do Neutralino (bin/) e resources/js/neutr
 npm start         # abre a janela em modo de desenvolvimento
 npm run dev       # idem, com DevTools (F12)
 npm run build     # gera dist/atlas/atlas-win_x64.exe (executável único, ~4 MB)
+npm run installer # build + instalador: release/Atlas-Setup-<versão>.exe (~3 MB)
 ```
 
 O executável depende só do WebView2, que já vem no Windows 10/11. Ele também é gerado para Linux e macOS.
+
+## Instalador para amigos
+
+`npm run installer` gera `release/Atlas-Setup-<versão>.exe`. É só enviar esse arquivo.
+
+- Instala só para o usuário atual, sem pedir administrador (em `%LOCALAPPDATA%ProgramsAtlas`), cria atalho no menu Iniciar (e na área de trabalho, se marcado) e aparece em "Aplicativos instalados" para desinstalar.
+- Português do Brasil ou inglês, conforme o Windows.
+- Se o Windows não tiver o WebView2 (já vem no Windows 11 e no Windows 10 atualizado), o instalador baixa o componente oficial da Microsoft.
+- Rodar o instalador de novo atualiza a versão instalada. Para uma versão nova, mude `version` em package.json.
+- **O instalador não é assinado digitalmente**, então o Windows SmartScreen mostra "O Windows protegeu o computador". Quem for instalar clica em **Mais informações → Executar assim mesmo**. Remover o aviso exige um certificado de assinatura de código (pago).
 
 ## Uso
 

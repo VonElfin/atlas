@@ -4,6 +4,11 @@
 const TILE = 256;
 const cache = new Map(); // url -> Promise<ImageData | null>
 const CACHE_MAX = 192;
+// Sem timeout, um servidor que não responde prende uma das 6 conexões por host para sempre.
+const FETCH_TIMEOUT_MS = 12000;
+
+const timed = (url, signal) =>
+  fetch(url, { signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(FETCH_TIMEOUT_MS)]) : AbortSignal.timeout(FETCH_TIMEOUT_MS) });
 
 export const fillTemplate = (template, z, x, y) =>
   template.replace('{z}', z).replace('{x}', x).replace('{y}', y);
@@ -55,7 +60,7 @@ export function tileImage(template, z, x, y, fallback = 0) {
   return remember(
     key,
     (async () => {
-      const res = await fetch(url).catch(() => null);
+      const res = await timed(url).catch(() => null);
       if (res?.ok) return decode(await res.blob());
       if (!fallback || z === 0) {
         if (!res) cache.delete(key); // falha de rede: tente de novo na próxima vez
@@ -66,8 +71,10 @@ export function tileImage(template, z, x, y, fallback = 0) {
   );
 }
 
-async function ancestorTile(template, z, x, y, levels) {
+// `signal`: se o MapLibre já cancelou o tile, não gasta conexões buscando ancestrais.
+async function ancestorTile(template, z, x, y, levels, signal) {
   for (let k = 1; k <= Math.min(levels, z); k++) {
+    signal?.throwIfAborted();
     const up = await tileImage(template, z - k, x >> k, y >> k);
     if (up) return fromAncestor(up, k, x, y);
   }
@@ -84,12 +91,12 @@ async function fallbackProtocol(params, abort) {
   const levels = Number(q.get('levels') ?? 6);
   // O 404 do Esri vem sem cabeçalho CORS, então o fetch rejeita em vez de
   // devolver o status: qualquer falha que não seja cancelamento conta como ausente.
-  const res = await fetch(fillTemplate(template, z, x, y), { signal: abort.signal }).catch((err) => {
+  const res = await timed(fillTemplate(template, z, x, y), abort.signal).catch((err) => {
     if (abort.signal.aborted) throw err;
     return null;
   });
   if (res?.ok) return { data: await res.arrayBuffer() };
-  const img = await ancestorTile(template, z, x, y, levels);
+  const img = await ancestorTile(template, z, x, y, levels, abort.signal);
   if (img) return { data: await createImageBitmap(img) };
   throw new Error('Tile indisponível');
 }

@@ -1,47 +1,52 @@
-// Normais climatológicas 1991–2020 (reanálise ERA5 via Open-Meteo),
+// Normais climatológicas mensais (NASA POWER, reanálise MERRA-2, 2001–2025),
 // classificação de Köppen-Geiger e climograma em SVG.
+//
+// A API de climatologia devolve só os 12 valores mensais (~1,5 KB). A versão
+// anterior baixava 30 anos de dados diários (~300 KB) do Open-Meteo, que
+// bloqueia (HTTP 429) depois de poucos cliques por contar o volume de dados.
 
-const API = 'https://archive-api.open-meteo.com/v1/archive';
+const API = 'https://power.larc.nasa.gov/api/temporal/climatology/point';
 const MONTHS = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
+const KEYS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 const DAYS = [31, 28.25, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+const FILL = -999;
+
+// Os dados vêm numa grade de 0,5° x 0,625°: pontos da mesma célula dão o mesmo resultado.
+const cache = new Map();
+const cellKey = (lat, lng) => `${Math.floor((lat + 90) / 0.5)}:${Math.floor((lng + 180) / 0.625)}`;
 
 /** Médias mensais: { tmean[12], tmax[12], tmin[12], precip[12] (mm/mês) }. */
 export async function fetchNormals(lat, lng, signal) {
+  const key = cellKey(lat, lng);
+  if (cache.has(key)) return cache.get(key);
+
   const params = new URLSearchParams({
+    parameters: 'T2M,T2M_RANGE,PRECTOTCORR',
+    community: 'RE',
     latitude: lat.toFixed(3),
     longitude: lng.toFixed(3),
-    start_date: '1991-01-01',
-    end_date: '2020-12-31',
-    daily: 'temperature_2m_mean,temperature_2m_max,temperature_2m_min,precipitation_sum',
-    timezone: 'UTC',
+    format: 'JSON',
   });
   const res = await fetch(`${API}?${params}`, { signal });
-  if (!res.ok) throw new Error(`Open-Meteo ${res.status}`);
-  const { daily } = await res.json();
+  if (!res.ok) throw new Error(`NASA POWER ${res.status}`);
+  const { properties } = await res.json();
+  const p = properties?.parameter;
+  const series = (name) => KEYS.map((k) => p?.[name]?.[k]);
+  const t = series('T2M');
+  const range = series('T2M_RANGE');
+  const pr = series('PRECTOTCORR');
+  if ([t, range, pr].some((a) => a.some((v) => v == null || v === FILL))) throw new Error('Sem dados para este ponto');
 
-  const sum = { tmean: zeros(), tmax: zeros(), tmin: zeros(), precip: zeros() };
-  const count = zeros();
-  daily.time.forEach((day, i) => {
-    const m = Number(day.slice(5, 7)) - 1;
-    if (daily.temperature_2m_mean[i] == null) return;
-    sum.tmean[m] += daily.temperature_2m_mean[i];
-    sum.tmax[m] += daily.temperature_2m_max[i];
-    sum.tmin[m] += daily.temperature_2m_min[i];
-    sum.precip[m] += daily.precipitation_sum[i] ?? 0;
-    count[m]++;
-  });
-  if (count.some((c) => c === 0)) throw new Error('Série incompleta');
-  return {
-    tmean: sum.tmean.map((v, m) => v / count[m]),
-    tmax: sum.tmax.map((v, m) => v / count[m]),
-    tmin: sum.tmin.map((v, m) => v / count[m]),
-    // Média diária × dias do mês: robusto a dias faltantes na série.
-    precip: sum.precip.map((v, m) => (v / count[m]) * DAYS[m]),
+  const normals = {
+    tmean: t,
+    // A API dá a amplitude diária média; máx/mín médias são aproximadas por média ± ½ amplitude.
+    tmax: t.map((v, m) => v + range[m] / 2),
+    tmin: t.map((v, m) => v - range[m] / 2),
+    // mm/dia × dias do mês.
+    precip: pr.map((v, m) => v * DAYS[m]),
   };
-}
-
-function zeros() {
-  return Array(12).fill(0);
+  cache.set(key, normals);
+  return normals;
 }
 
 /** Código Köppen-Geiger a partir das médias mensais (critérios de Peel et al., 2007). */

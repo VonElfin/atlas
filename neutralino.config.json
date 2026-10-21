@@ -14,7 +14,7 @@
     "enabled": true,
     "writeToLogFile": false
   },
-  "nativeAllowList": ["app.*", "os.open", "window.*", "storage.*"],
+  "nativeAllowList": ["storage.getData", "storage.setData", "os.open"],
   "modes": {
     "window": {
       "title": "Atlas — Globo interativo",
