@@ -20,7 +20,7 @@ O executável depende só do WebView2, que já vem no Windows 10/11. Ele também
 - **Passe o mouse** sobre o mapa para ver um selo com o valor de cada camada temática ligada (densidade, temperatura, precipitação, altitude…).
 - **Clique** em um ponto para ver: elevação, densidade populacional, temperatura e precipitação do mês escolhido, NDVI, cobertura do solo, classificação de Köppen-Geiger e climograma das normais de 1991–2020.
 - **Ctrl+K** abre a busca de lugares. **Esc** fecha painéis.
-- **Plano · Equal Earth** mostra o mapa-múndi na projeção de área igual Equal Earth em vez de Mercator. O terreno 3D só existe no modo Globo.
+- **Globo / Plano** alterna entre o globo 3D e o mapa plano (Mercator).
 - **Data dos dados mensais** troca o mês das camadas de clima e vegetação. O ▶ anima mês a mês.
 
 ## Camadas
@@ -40,7 +40,6 @@ O executável depende só do WebView2, que já vem no Windows 10/11. Ele também
 
 ## Como funciona
 
-- **Equal Earth:** o MapLibre (6.15, API experimental `addProjection`) posiciona os tiles no grid da projeção, mas não reprojeta o conteúdo. Por isso cada tile Equal Earth é montado em [resources/js/tiles.js](resources/js/tiles.js) a partir dos tiles Web Mercator. Em cada linha do tile a latitude é constante e a longitude é linear em x, o que deixa a reprojeção barata.
 - **Sem tiles cinza:** o satélite é pedido com `blankTile=false`. Onde o Esri não tem imagem naquele zoom, o app usa o tile ancestral ampliado em vez do aviso "Map data not yet available".
 - **Inclinação:** abaixo do z12 o Esri usa outro mosaico, bem mais escuro. Com a câmera perto do chão, os tiles distantes não descem abaixo do z12, o que evita a faixa escura no horizonte.
 - **Nitidez:** os tiles de satélite são exibidos a ~181 px em vez de 256 px, para nunca serem ampliados entre níveis de zoom.
@@ -64,7 +63,7 @@ resources/
   index.html, css/app.css
   js/main.js             mapa, painel, tempo, clique, busca
   js/layers.js           registro de mapas base e camadas
-  js/tiles.js            cache de tiles, fallback de tiles ausentes, Equal Earth
+  js/tiles.js            cache de tiles e fallback de tiles ausentes
   js/probe.js            leitura de valores por pixel (elevação, colormaps)
   js/climate.js          normais, Köppen-Geiger, climograma
   js/legend.js           legendas

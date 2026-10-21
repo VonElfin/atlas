@@ -3,16 +3,9 @@ import { BASEMAPS, LABELS, OVERLAYS, RELIEF_STOPS, TERRARIUM_TILES, gibsUrl } fr
 import { colormapLegend, reliefLegend } from './legend.js';
 import { colormapEntryAt, elevationAt } from './probe.js';
 import { climographSvg, fetchNormals, koppen, koppenName } from './climate.js';
-import {
-  EQUAL_EARTH_CRS,
-  EQUAL_EARTH_MASK_URL,
-  equalEarthUrl,
-  fallbackUrl,
-  registerProtocols,
-} from './tiles.js';
+import { fallbackUrl, registerProtocols } from './tiles.js';
 
 registerProtocols(maplibregl);
-maplibregl.addProjection(EQUAL_EARTH_CRS);
 maplibregl.setMaxParallelImageRequests(24);
 
 const $ = (sel) => document.querySelector(sel);
@@ -98,7 +91,7 @@ for (const o of OVERLAYS) {
   if (o.variants && !o.variants.includes(state.overlays[o.id].variant)) state.overlays[o.id].variant = o.variant;
 }
 if (state.month < MONTH_MIN || state.month > MONTH_MAX) state.month = MONTH_DEFAULT;
-if (state.projection !== 'globe') state.projection = 'equal-earth'; // versões antigas salvavam 'mercator'
+if (state.projection !== 'globe') state.projection = 'mercator'; // inclui valores salvos por versões anteriores
 
 let saveTimer;
 function persist() {
@@ -172,28 +165,20 @@ const sourceUrls = new Map(); // id da camada temática -> URL de tiles em uso
 const vis = (on) => (on ? 'visible' : 'none');
 
 const SPACE = '#04060d';
-const EQUAL_EARTH = 'equal-earth';
-const isEqualEarth = () => state.projection === EQUAL_EARTH;
 
 // Tiles de 256 px exibidos em ~181 px: o MapLibre escolhe meio nível de zoom
 // acima e a imagem nunca é ampliada (com 256 px ela chega a 1,41×, borrando).
 const SHARP_TILE = Math.round(256 / Math.min(2, (window.devicePixelRatio || 1) * Math.SQRT2));
 
-// Lista final de URLs de uma fonte raster conforme a projeção atual.
-// No Equal Earth todos os tiles passam pela reprojeção; no globo, só quem
-// precisa de fallback passa por protocolo próprio.
-function tileUrls(templates, { maxzoom, sampling = 'linear', fallback = 0 }) {
-  if (isEqualEarth()) return [equalEarthUrl(templates[0], { maxzoom, sampling, fallback })];
-  if (fallback) return templates.map((t) => fallbackUrl(t, fallback));
-  return templates;
-}
+// Fontes com fallback passam pelo protocolo próprio, que troca tiles ausentes
+// pelo ancestral ampliado.
+const tileUrls = (templates, fallback = 0) => (fallback ? templates.map((t) => fallbackUrl(t, fallback)) : templates);
 
 function buildStyle() {
-  const ee = isEqualEarth();
   const sources = {
     dem: {
       type: 'raster-dem',
-      tiles: tileUrls(TERRARIUM_TILES, { maxzoom: 12, sampling: 'nearest' }),
+      tiles: TERRARIUM_TILES,
       encoding: 'terrarium',
       tileSize: 256,
       maxzoom: 12,
@@ -201,16 +186,14 @@ function buildStyle() {
     },
     labels: {
       type: 'raster',
-      tiles: tileUrls(LABELS.tiles, { maxzoom: LABELS.maxzoom }),
+      tiles: LABELS.tiles,
       tileSize: 256,
       maxzoom: LABELS.maxzoom,
       attribution: LABELS.attribution,
     },
   };
-  // Terreno 3D só no globo; fonte separada da do sombreamento, como recomenda o MapLibre.
-  if (!ee) {
-    sources['terrain-dem'] = { type: 'raster-dem', tiles: TERRARIUM_TILES, encoding: 'terrarium', tileSize: 256, maxzoom: 13 };
-  }
+  // Fonte do terreno 3D separada da do sombreamento, como recomenda o MapLibre.
+  sources['terrain-dem'] = { type: 'raster-dem', tiles: TERRARIUM_TILES, encoding: 'terrarium', tileSize: 256, maxzoom: 13 };
   const layers = [{ id: 'space', type: 'background', paint: { 'background-color': SPACE } }];
 
   for (const b of BASEMAPS) {
@@ -218,7 +201,7 @@ function buildStyle() {
     const maxzoom = info ? info.maxzoom : b.maxzoom;
     sources[`base-${b.id}`] = {
       type: 'raster',
-      tiles: tileUrls(info ? [gibsUrl(info, b.gibs, info.defaultTime)] : b.tiles, { maxzoom, fallback: b.fallback }),
+      tiles: tileUrls(info ? [gibsUrl(info, b.gibs, info.defaultTime)] : b.tiles, b.fallback),
       tileSize: SHARP_TILE,
       maxzoom,
       attribution: b.attribution,
@@ -248,7 +231,7 @@ function buildStyle() {
       sourceUrls.set(o.id, g.url);
       sources[`src-${o.id}`] = {
         type: 'raster',
-        tiles: gibsTiles(o, g),
+        tiles: [g.url],
         tileSize: 256,
         maxzoom: g.info.maxzoom,
         attribution: `${o.source ? `${esc(o.source)} · ` : ''}<a href="https://earthdata.nasa.gov/gibs" target="_blank">NASA GIBS</a>`,
@@ -260,21 +243,12 @@ function buildStyle() {
     layers.push(layer);
   }
 
-  if (ee) {
-    // Recorta tudo (inclusive o relevo, que pinta o tile inteiro) no contorno do mundo.
-    sources['ee-mask'] = { type: 'raster', tiles: [EQUAL_EARTH_MASK_URL], tileSize: 256, maxzoom: 8 };
-    layers.push({ id: 'ee-mask', type: 'raster', source: 'ee-mask', paint: { 'raster-fade-duration': 0 } });
-  }
   layers.push({ id: 'labels', type: 'raster', source: 'labels', layout: { visibility: vis(state.labels) } });
 
   const style = {
     version: 8,
-    projection: { type: ee ? EQUAL_EARTH_CRS.name : 'globe' },
-    sources,
-    layers,
-  };
-  if (!ee) {
-    style.sky = {
+    projection: { type: state.projection },
+    sky: {
       'sky-color': '#0d1b3a',
       'horizon-color': '#6f9fd8',
       'fog-color': '#a9c6e8',
@@ -282,20 +256,19 @@ function buildStyle() {
       'horizon-fog-blend': 0.7,
       'fog-ground-blend': 0.3,
       'atmosphere-blend': ['interpolate', ['linear'], ['zoom'], 0, 1, 5, 1, 8, 0],
-    };
-    if (state.terrain) style.terrain = { source: 'terrain-dem', exaggeration: state.exaggeration };
-  }
+    },
+    sources,
+    layers,
+  };
+  if (state.terrain) style.terrain = { source: 'terrain-dem', exaggeration: state.exaggeration };
   return style;
 }
-
-const gibsTiles = (o, g) => tileUrls([g.url], { maxzoom: g.info.maxzoom, sampling: o.resampling ?? 'nearest' });
 
 // Abaixo do z12 o Esri usa outro mosaico, bem mais escuro e saturado. Com a
 // câmera inclinada perto do chão, os tiles distantes cairiam nesses zooms e
 // formariam uma faixa escura: com a câmera perto, não desça além do z12.
 const ESRI_MOSAIC_ZOOM = 12;
 function tuneImageryLod() {
-  if (isEqualEarth()) return;
   const id = 'base-satellite';
   const src = map.getSource(id);
   if (!src || src.atlasLod) return;
@@ -330,23 +303,10 @@ map.on('dataloading', () => (loading.hidden = false));
 map.on('idle', () => (loading.hidden = true));
 
 function applyTerrain() {
-  if (isEqualEarth()) return;
   map.setTerrain(state.terrain ? { source: 'terrain-dem', exaggeration: state.exaggeration } : null);
 }
 
 // ---------------------------------------------------------------- painel: visualização
-
-const NO_PADDING = { left: 0, right: 0, top: 0, bottom: 0 };
-
-// Enquadra o mapa-múndi inteiro na área livre ao lado do painel.
-function fitWorld() {
-  const { width, height } = map.getContainer().getBoundingClientRect();
-  const left = document.body.classList.contains('panel-collapsed') ? 60 : 330;
-  const worldW = 512; // largura do mundo no zoom 0 (tile 0/0/0 do Equal Earth)
-  const worldH = worldW * 0.4866; // proporção altura/largura do Equal Earth
-  const zoom = Math.log2(Math.min((width - left - 40) / worldW, (height - 110) / worldH));
-  map.easeTo({ center: [0, 0], zoom, pitch: 0, bearing: 0, padding: { ...NO_PADDING, left }, duration: 700 });
-}
 
 function setSeg(container, attr, value) {
   for (const btn of container.querySelectorAll(`[${attr}]`)) {
@@ -361,11 +321,8 @@ projSeg.addEventListener('click', (ev) => {
   if (!btn) return;
   if (btn.dataset.projection === state.projection) return;
   state.projection = btn.dataset.projection;
-  // As URLs de todas as fontes mudam (tiles reprojetados), então troca o estilo inteiro.
-  map.setStyle(buildStyle(), { diff: false });
-  map.once('style.load', () => (isEqualEarth() ? fitWorld() : map.easeTo({ padding: NO_PADDING, duration: 0 })));
+  map.setProjection({ type: state.projection });
   setSeg(projSeg, 'data-projection', state.projection);
-  syncTerrainUi();
   persist();
 });
 
@@ -376,17 +333,11 @@ terrainToggle.checked = state.terrain;
 exaggeration.value = state.exaggeration;
 exaggerationOut.value = `${fmt(state.exaggeration, 1)}×`;
 
-function syncTerrainUi() {
-  const ee = isEqualEarth();
-  terrainToggle.closest('.row').classList.toggle('disabled', ee);
-  terrainToggle.closest('.row').title = ee ? 'Terreno 3D disponível no modo Globo' : '';
-  $('#exaggeration-row').classList.toggle('disabled', ee || !state.terrain);
-}
-syncTerrainUi();
+$('#exaggeration-row').classList.toggle('disabled', !state.terrain);
 
 terrainToggle.addEventListener('change', () => {
   state.terrain = terrainToggle.checked;
-  syncTerrainUi();
+  $('#exaggeration-row').classList.toggle('disabled', !state.terrain);
   applyTerrain();
   if (state.terrain && map.getPitch() < 30) map.easeTo({ pitch: 60, duration: 1200 });
   persist();
@@ -485,7 +436,7 @@ function updateGibsSource(o) {
   const g = resolveGibs(o);
   if (sourceUrls.get(o.id) === g.url) return;
   sourceUrls.set(o.id, g.url);
-  map.getSource(`src-${o.id}`).setTiles(gibsTiles(o, g));
+  map.getSource(`src-${o.id}`).setTiles([g.url]);
 }
 
 OVERLAYS.forEach(renderOverlay);
